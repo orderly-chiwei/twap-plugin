@@ -2,6 +2,8 @@
 
 Time-Weighted Average Price (TWAP) execution strategy, built as an Orderly SDK v3 plugin for WooFi Pro.
 
+> **Disclaimer: This plugin is a proof-of-concept / demo implementation.** It is NOT production-ready. If you intend to deploy this in a live trading environment, the backend requires significant hardening around stability, security, and order reconciliation. See [Production Readiness](#production-readiness) below for details.
+
 ## Architecture
 
 ```
@@ -150,7 +152,49 @@ import { twapPlugin } from "@/plugins/twap";
 | `CORS_ORIGINS` | `http://localhost:4567,http://localhost:3000` | Comma-separated allowed origins |
 | `ORDERLY_API_URL` | `https://testnet-api-evm.orderly.org` | Orderly API base URL |
 
-## Known Limitations
+## Production Readiness
+
+**This demo covers the happy path but lacks the resilience required for production trading.** Below is a checklist of what needs to be addressed before going live.
+
+### Stability
+
+| Gap | Risk | Required Work |
+|-----|------|---------------|
+| **No order reconciliation** | If a `placeOrder` call times out but Orderly accepted it, we lose track of the order ("ghost order" sitting on the book) | On timeout/error, query `GET /v1/client/order/{client_order_id}` to confirm actual state before moving on |
+| **In-memory task state** | Backend restart kills all execution loops; tasks stay `running` in DB but no slices are placed | Startup recovery: scan `running` tasks, resume execution from `slices_placed` count, reconcile each slice via `client_order_id` |
+| **No WebSocket fills** | Fill tracking is optimistic; we don't know actual fill qty/price | Subscribe to `executionreport` WS topic, update slice status in real-time, recalculate remaining quantity |
+| **Single-process only** | No horizontal scaling; one crash stops everything | Move to a job queue (e.g. BullMQ + Redis) or durable workflow engine (Temporal) |
+| **SQLite in production** | File-based DB, no concurrent write safety, no replication | Migrate to PostgreSQL for multi-instance support |
+| **No health checks** | No way to detect if engine is stuck or API is down | Add `/health` endpoint, heartbeat monitoring, alerting on stalled tasks |
+
+### Security
+
+| Gap | Risk | Required Work |
+|-----|------|---------------|
+| **Session keys transit over REST** | Frontend sends `secretKey` in POST body — interceptable if not HTTPS | Enforce HTTPS in production; consider server-side key vault or broker-managed key injection |
+| **No authentication on API** | Anyone who knows the backend URL can create/cancel tasks | Add API key or JWT auth; validate that the caller owns the `accountId` |
+| **No request signing** | Backend API requests are unsigned — vulnerable to replay/tampering | Add HMAC or JWT-signed requests from frontend to backend |
+| **Rate limits are in-memory** | Restart resets all rate limit counters | Move to Redis-backed rate limiting |
+| **CORS is the only access control** | CORS is browser-enforced only; cURL/scripts bypass it entirely | Add server-side auth as primary access control, CORS as defense-in-depth |
+
+### Order Execution
+
+| Gap | Risk | Required Work |
+|-----|------|---------------|
+| **Fixed price offset** | 5-10 bps may not cross the spread on illiquid markets, causing missed fills | Dynamic offset based on current spread; or fallback to MARKET order after IOC miss |
+| **No partial fill handling** | If IOC partially fills, remaining qty is lost for that slice | Track partial fills via WS, carry unfilled qty to next slice |
+| **No max slippage control** | No price protection beyond the offset | Add configurable max slippage; abort task if market moves beyond threshold |
+| **Reduce Only not implemented** | UI checkbox exists but backend ignores it | Pass `reduce_only: true` to Orderly API when enabled |
+| **Dead man switch unauthorized** | `cancel_all_after` fails with `-1002` on testnet session keys | Investigate key permissions; implement client-side fallback timer |
+
+### Monitoring & Observability
+
+- Structured logging (JSON) with task ID correlation
+- Metrics: orders placed/filled/failed per task, latency per slice, total slippage
+- Alerting on: task error rate > threshold, stalled tasks, API errors
+- Audit trail: immutable log of every order placed with full request/response
+
+## Known Limitations (Demo)
 
 - **No WebSocket integration**: Fill tracking is optimistic; production should subscribe to `executionreport` WS topic
 - **No reconciliation on restart**: If backend restarts, in-flight tasks lose their execution loop (DB status can be cancelled manually)
