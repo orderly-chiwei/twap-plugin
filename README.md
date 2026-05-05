@@ -10,23 +10,30 @@ Time-Weighted Average Price (TWAP) execution strategy, built as an Orderly SDK v
 
 ## Architecture
 
-```
-Frontend (SDK Plugin)              Backend (Node.js Service)
-┌─────────────────────┐            ┌──────────────────────┐
-│ TwapForm.tsx         │  REST     │ server.ts (Express)   │
-│  - UI form           │ ───────> │ engine.ts (executor)  │
-│  - validation        │ <─────── │ db.ts (SQLite)        │
-│  - task monitoring   │           │ api.ts (Orderly API)  │
-│                      │           │ auth.ts (ed25519)     │
-│ TwapSection.tsx      │           │ middleware.ts         │
-│  - interceptors      │           └──────────┬───────────┘
-│  - Advanced dropdown │                      │
-│    injection          │                      │ Orderly API
-│                      │                      │ (POST /v1/order)
-│ index.ts (plugin)    │                      ▼
-└─────────────────────┘            ┌──────────────────────┐
-                                   │ Orderly Orderbook     │
-                                   └──────────────────────┘
+```mermaid
+flowchart LR
+    subgraph Frontend["Frontend (SDK Plugin)"]
+        TF["TwapForm.tsx\n- UI form\n- validation\n- task monitoring"]
+        TS["TwapSection.tsx\n- interceptors\n- Advanced dropdown injection"]
+        IX["index.ts (plugin)"]
+    end
+
+    subgraph Backend["Backend (Node.js Service)"]
+        SV["server.ts (Express)"]
+        EN["engine.ts (executor)"]
+        DB["db.ts (SQLite)"]
+        API["api.ts (Orderly API)"]
+        AU["auth.ts (ed25519)"]
+        MW["middleware.ts"]
+    end
+
+    OB["Orderly Orderbook"]
+
+    Frontend -- "REST" --> SV
+    SV --> EN
+    EN --> API
+    API -- "POST /v1/order" --> OB
+    EN --> DB
 ```
 
 **Frontend** = SDK plugin (interceptor-based, runs in broker's app)
