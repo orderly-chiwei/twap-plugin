@@ -1,0 +1,14 @@
+{
+  "name": "TWAP Strategy",
+  "pluginId": "orderly-twap-plugin",
+  "version": "1.0.0",
+  "description": "Time-Weighted Average Price (TWAP) execution strategy. Splits large orders into smaller IOC slices executed at regular intervals to minimize market impact. Features dynamic symbol validation, USDC/base currency input, and real-time task monitoring.",
+  "author": "WOOFi Pro",
+  "interceptors": [
+    "Trading.OrderEntry.TypeTabs",
+    "OrderEntry"
+  ],
+  "entryPoint": "src/index.ts",
+  "npmName": "@anthropic-orderly/twap-plugin",
+  "repoUrl": "https://github.com/orderly-chiwei/twap-plugin"
+}

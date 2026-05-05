@@ -1,0 +1,13 @@
+{
+  "name": "@anthropic-orderly/twap-plugin",
+  "version": "1.0.0",
+  "description": "TWAP (Time-Weighted Average Price) execution strategy plugin for Orderly SDK v3. Splits large orders into smaller IOC slices executed at regular intervals to minimize market impact.",
+  "main": "src/index.ts",
+  "author": "WOOFi Pro",
+  "license": "MIT",
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "@orderly.network/hooks": ">=3.0.0",
+    "@orderly.network/ui": ">=3.0.0"
+  }
+}
