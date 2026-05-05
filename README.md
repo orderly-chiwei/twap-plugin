@@ -6,7 +6,7 @@ Time-Weighted Average Price (TWAP) execution strategy, built as an Orderly SDK v
 
 [Watch Demo Video](demo/module-twap-demo.mp4)
 
-> **Disclaimer: This plugin is a proof-of-concept / demo implementation.** It is NOT production-ready. If you intend to deploy this in a live trading environment, the backend requires significant hardening around stability, security, and order reconciliation. See [Production Readiness](#production-readiness) below for details.
+> **Disclaimer: This plugin is a proof-of-concept / demo implementation.** It is NOT production-ready. Both frontend and backend require thorough review and hardening before use in a live trading environment — including but not limited to stability, security, order reconciliation, edge case handling, and UI/UX validation. The current implementation may not cover all scenarios. See [Production Readiness](#production-readiness) for known gaps.
 
 ## Architecture
 
