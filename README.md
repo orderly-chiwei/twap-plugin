@@ -2,6 +2,10 @@
 
 Time-Weighted Average Price (TWAP) execution strategy, built as an Orderly SDK v3 plugin for WooFi Pro.
 
+## Demo
+
+https://github.com/orderly-chiwei/twap-plugin/raw/main/demo/module-twap-demo.mp4
+
 > **Disclaimer: This plugin is a proof-of-concept / demo implementation.** It is NOT production-ready. If you intend to deploy this in a live trading environment, the backend requires significant hardening around stability, security, and order reconciliation. See [Production Readiness](#production-readiness) below for details.
 
 ## Architecture
