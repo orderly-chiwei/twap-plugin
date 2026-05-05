@@ -21,7 +21,7 @@ flowchart LR
     subgraph Backend["Backend (Node.js Service)"]
         SV["server.ts (Express)"]
         EN["engine.ts (executor)"]
-        DB["db.ts (SQLite)"]
+        DB["db.ts (persistence)"]
         API["api.ts (Orderly API)"]
         AU["auth.ts (ed25519)"]
         MW["middleware.ts"]
@@ -81,32 +81,35 @@ backend/
 │   ├── engine.ts      # TWAP execution loop
 │   ├── api.ts         # Orderly API client (orders, market data, symbol info)
 │   ├── auth.ts        # ed25519 request signing
-│   ├── db.ts          # SQLite persistence (tasks + slices)
+│   ├── db.ts          # Persistence layer (SQLite for demo — swap for your own DB in production)
 │   └── middleware.ts   # Rate limiting, input validation, task limits
-└── data/
-    └── twap.db        # SQLite database (auto-created)
+└── data/              # Auto-created, demo only
 ```
+
+> **Note:** The demo uses SQLite for zero-config local development. SQLite is NOT recommended for production. Replace `db.ts` with your own persistence layer (e.g. PostgreSQL, MySQL) before deploying.
 
 ### Execution Model
 
 1. Frontend sends `POST /twap` with account ID, session key, symbol, side, total qty, duration, num slices
-2. Backend creates a task in SQLite, starts an async execution loop
+2. Backend creates a task in the database, starts an async execution loop
 3. Each slice: fetch mark price -> calculate IOC limit price (mark + offset) -> place order via Orderly API
-4. Track progress in SQLite; frontend polls `GET /twap?accountId=xxx` every 3s
+4. Track progress in database; frontend polls `GET /twap?accountId=xxx` every 3s
 
 ### Order Placement
 
 - **Order type**: `IOC` (Immediate-or-Cancel) — guarantees immediate execution or cancellation, no residual limit orders on the book
-- **Price**: mark price + offset (default 5bps for sells, 10bps with randomize)
-- **Quantity**: total qty / num slices, rounded down to `base_tick` (fetched dynamically from symbol info API)
-- **Identification**: `order_tag: "TWAP_DEMO"` + `client_order_id: "twap_{timestamp}_{random}_{sliceIndex}"`
+- **Price**: mark price + offset (demo default: 5bps, 10bps with randomize — adjust based on your market's typical spread)
+- **Quantity**: total qty / num slices, rounded down to `base_tick` (fetched dynamically from Orderly symbol info API)
+- **Identification**: `order_tag` + `client_order_id: "twap_{timestamp}_{random}_{sliceIndex}"`
 
-### Security
+### Security (Demo Defaults)
+
+The following values are demo defaults for local testing. **Adjust all limits and thresholds to match your production requirements.**
 
 - CORS origin whitelist (configurable via `CORS_ORIGINS` env var)
-- Rate limiting: 3 creates/60s per account, 60 reads/60s per IP
-- Input validation: symbol pattern, quantity range, duration range, slice count
-- Active task limit: max 5 per account
+- Rate limiting (demo: 3 creates/60s per account, 60 reads/60s per IP)
+- Input validation: symbol pattern, qty 0-1M, duration 60s-86400s, slices 2-100, offset 0-500bps
+- Active task limit (demo: max 5 per account)
 - Session keys held only in-memory for active tasks, never logged or persisted
 
 ### API Routes
@@ -131,15 +134,15 @@ Engine stops a task immediately on these errors (no retry):
 
 ## Validation
 
-Frontend fetches `GET /v1/public/info/{symbol}` for real-time validation:
+Frontend and backend both fetch **live symbol rules** from the Orderly API (`GET /v1/public/info/{symbol}`). These values are defined by Orderly, not by this plugin:
 
-| Rule | Source | Check |
-|------|--------|-------|
-| Step size | `base_tick` (e.g. 0.0001 for ETH) | Quantity rounded to tick |
-| Min quantity | `base_min` (e.g. 0.0001) | Per-suborder >= base_min |
-| Min notional | `min_notional` (e.g. 10 USDC) | Per-suborder value >= 10 USDC (with 10% buffer) |
+| Rule | Orderly API Field | Example (ETH) | Check |
+|------|-------------------|---------------|-------|
+| Step size | `base_tick` | 0.0001 | Quantity rounded down to tick |
+| Min quantity | `base_min` | 0.0001 | Per-suborder >= base_min |
+| Min notional | `min_notional` | 10 USDC | Per-suborder value >= min_notional |
 
-Backend also fetches symbol info dynamically (cached 5 min) for the same validations.
+Values vary per symbol and may change — the plugin fetches them dynamically (backend caches for 5 min). The frontend applies a 10% buffer on `min_notional` to account for price drift between validation and execution.
 
 ## Running Locally
 
@@ -175,7 +178,7 @@ import { twapPlugin } from "@/plugins/twap";
 | **In-memory task state** | Backend restart kills all execution loops; tasks stay `running` in DB but no slices are placed | Startup recovery: scan `running` tasks, resume execution from `slices_placed` count, reconcile each slice via `client_order_id` |
 | **No WebSocket fills** | Fill tracking is optimistic; we don't know actual fill qty/price | Subscribe to `executionreport` WS topic, update slice status in real-time, recalculate remaining quantity |
 | **Single-process only** | No horizontal scaling; one crash stops everything | Move to a job queue (e.g. BullMQ + Redis) or durable workflow engine (Temporal) |
-| **SQLite in production** | File-based DB, no concurrent write safety, no replication | Migrate to PostgreSQL for multi-instance support |
+| **SQLite is demo-only** | File-based DB, no concurrent write safety, no replication | Replace with a production database (PostgreSQL, MySQL, etc.) |
 | **No health checks** | No way to detect if engine is stuck or API is down | Add `/health` endpoint, heartbeat monitoring, alerting on stalled tasks |
 
 ### Security
